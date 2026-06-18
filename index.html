@@ -1,0 +1,1903 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>線上鍵盤功能完整度與硬體測試機</title>
+    <!-- Tailwind CSS 引入 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', 'Fira Code', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* 鍵盤基本變數與 3D 效果 */
+        :root {
+            --key-size: 46px;
+            --key-gap: 4px;
+        }
+
+        /* 響應式調整 */
+        @media (max-width: 1200px) {
+            :root { --key-size: 38px; --key-gap: 3px; }
+        }
+        @media (max-width: 900px) {
+            :root { --key-size: 30px; --key-gap: 2px; }
+        }
+
+        .key-board-container {
+            gap: calc(var(--key-gap) * 3);
+        }
+
+        .key-row {
+            display: flex;
+            gap: var(--key-gap);
+            margin-bottom: var(--key-gap);
+        }
+
+        /* 3D 鍵帽樣式 */
+        .keycap {
+            height: var(--key-size);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 6px;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 6px;
+            transition: all 0.05s ease;
+            cursor: pointer;
+            position: relative;
+            box-shadow: 0 4px 0 0 rgba(0,0,0,0.25);
+            transform: translateY(0);
+        }
+
+        @media (max-width: 900px) {
+            .keycap { font-size: 8px; padding: 2px; }
+        }
+
+        /* 按下時的下沉與發光效果 */
+        .keycap.active {
+            transform: translateY(3px) !important;
+            box-shadow: 0 1px 0 0 rgba(0,0,0,0.1) !important;
+        }
+
+        /* 捲軸美化 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e1e2e;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #45475a;
+            border-radius: 3px;
+        }
+
+        /* 動態晃動特效 */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-2px); }
+            75% { transform: translateX(2px); }
+        }
+        .animate-shake {
+            animation: shake 0.2s ease-in-out infinite;
+        }
+
+        /* CPS 測試板波紋與點擊縮放 */
+        .cps-click-pad {
+            transition: all 0.08s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .cps-click-pad:active {
+            transform: scale(0.97);
+            box-shadow: 0 2px 10px rgba(99, 102, 241, 0.2);
+        }
+    </style>
+    
+    <!-- ⚡ 絕對優先權：全域右鍵與拖曳選取阻斷機制 (不等待 DOM 載入即刻執行) -->
+    <script>
+        (function forceBlockContextMenu() {
+            const blockEvent = function(e) {
+                if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return true;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                return false;
+            };
+            
+            // 覆蓋最高層級事件
+            window.addEventListener('contextmenu', blockEvent, { capture: true, passive: false });
+            document.addEventListener('contextmenu', blockEvent, { capture: true, passive: false });
+            window.addEventListener('dragstart', blockEvent, { capture: true, passive: false });
+            document.addEventListener('dragstart', blockEvent, { capture: true, passive: false });
+            
+            // 覆蓋傳統屬性
+            document.oncontextmenu = blockEvent;
+            window.oncontextmenu = blockEvent;
+        })();
+    </script>
+</head>
+<body class="bg-[#11111b] text-[#cdd6f4] min-h-screen flex flex-col justify-between" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
+
+    <!-- 頂部導航與標題 -->
+    <header class="border-b border-[#313244] bg-[#181825] px-6 py-4 shadow-lg">
+        <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-indigo-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002-2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path></svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white to-[#a6adc8]">
+                        線上鍵盤功能完整度與硬體檢測機
+                    </h1>
+                    <p class="text-xs text-[#a6adc8]">Keyboard Functionality, Zero-Latency Hi-Fi Audio & NKRO Diagnostics</p>
+                </div>
+            </div>
+
+            <!-- 控制面板 -->
+            <div class="flex flex-wrap items-center gap-3">
+                <!-- 鍵盤尺寸配置 -->
+                <div class="flex bg-[#1e1e2e] p-1 rounded-lg border border-[#313244]">
+                    <button onclick="changeLayout('full')" id="btn-layout-full" class="px-3 py-1.5 rounded text-xs font-bold transition bg-[#313244] text-white">100% 全尺寸</button>
+                    <button onclick="changeLayout('tkl')" id="btn-layout-tkl" class="px-3 py-1.5 rounded text-xs font-bold transition text-[#a6adc8] hover:text-white">80% TKL</button>
+                    <button onclick="changeLayout('compact')" id="btn-layout-compact" class="px-3 py-1.5 rounded text-xs font-bold transition text-[#a6adc8] hover:text-white">60% Mini</button>
+                </div>
+
+                <!-- 機械軸敲擊聲音音效 -->
+                <div class="flex items-center gap-2 bg-[#1e1e2e] px-3 py-1.5 rounded-lg border border-[#313244]">
+                    <span class="text-xs text-[#a6adc8] font-bold">雙向鍵軸音效:</span>
+                    <select id="switch-sound" class="bg-[#313244] text-white text-xs rounded px-2 py-1 outline-none border border-[#45475a] cursor-pointer">
+                        <option value="blue">青軸 (Clicky - 清脆)</option>
+                        <option value="brown">茶軸 (Tactile - 輕微段落)</option>
+                        <option value="red">紅軸 (Linear - 輕盈觸底)</option>
+                        <option value="black">黑軸 (Heavy - 厚實觸底)</option>
+                        <option value="thocky" selected>客製麻將軸 (Thocky - 石子 HiFi)</option>
+                        <option value="silent">靜音紅軸 (Silent - 靜音)</option>
+                        <option value="none">靜音 (Mute)</option>
+                    </select>
+                </div>
+
+                <!-- 色彩主題切換 -->
+                <div class="flex items-center gap-2 bg-[#1e1e2e] px-3 py-1.5 rounded-lg border border-[#313244]">
+                    <span class="text-xs text-[#a6adc8] font-bold">主題外觀:</span>
+                    <select id="theme-select" onchange="changeTheme()" class="bg-[#313244] text-white text-xs rounded px-2 py-1 outline-none border border-[#45475a] cursor-pointer">
+                        <option value="cyberpunk">賽博霓虹 (Cyberpunk)</option>
+                        <option value="retro">經典灰白 (Classic Retro)</option>
+                        <option value="stealth" selected>極緻暗黑 (Carbon Stealth)</option>
+                    </select>
+                </div>
+
+                <!-- 重置與匯出 -->
+                <button onclick="resetTester()" class="px-4 py-1.5 bg-[#f38ba8] hover:bg-[#f38ba8]/90 text-[#11111b] rounded-lg text-xs font-bold shadow-md transition-all active:scale-95">
+                    清除測試數據 (Reset)
+                </button>
+                <button onclick="copyReport()" class="px-4 py-1.5 bg-[#a6e3a1] hover:bg-[#a6e3a1]/90 text-[#11111b] rounded-lg text-xs font-bold shadow-md transition-all active:scale-95">
+                    複製測試報告 (Report)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要工作區 -->
+    <main class="flex-grow p-6 max-w-[1600px] w-full mx-auto flex flex-col gap-6 justify-center">
+        
+        <!-- 狀態資訊看版 -->
+        <section class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+            <!-- 實時狀態 -->
+            <div class="bg-[#181825] border border-[#313244] p-4 rounded-xl flex flex-col justify-between shadow-md">
+                <span class="text-xs text-[#a6adc8] font-bold">當前按下按鍵 (Active)</span>
+                <span id="stat-active" class="text-3xl font-black text-[#89b4fa] mt-1">0</span>
+            </div>
+            <!-- 最大無衝數 -->
+            <div class="bg-[#181825] border border-[#313244] p-4 rounded-xl flex flex-col justify-between shadow-md">
+                <span class="text-xs text-[#a6adc8] font-bold">最大無衝 (NKRO)</span>
+                <span id="stat-nkro" class="text-3xl font-black text-[#a6e3a1] mt-1">0</span>
+            </div>
+            <!-- 測試覆蓋率 -->
+            <div class="bg-[#181825] border border-[#313244] p-4 rounded-xl flex flex-col justify-between shadow-md">
+                <span class="text-xs text-[#a6adc8] font-bold">已測試鍵數 (Tested)</span>
+                <div class="flex items-baseline gap-2 mt-1">
+                    <span id="stat-tested" class="text-3xl font-black text-[#f9e2af]">0</span>
+                    <span id="stat-tested-total" class="text-sm text-[#a6adc8]">/ 104</span>
+                </div>
+            </div>
+            <!-- 連點/故障預警 -->
+            <div class="bg-[#181825] border border-[#313244] p-4 rounded-xl flex flex-col justify-between shadow-md">
+                <span class="text-xs text-[#a6adc8] font-bold">硬體連點警告 (Chatter)</span>
+                <span id="stat-chatter" class="text-3xl font-black text-[#f38ba8] mt-1">0</span>
+            </div>
+            <!-- 控制器輪詢率 -->
+            <div class="bg-[#181825] border border-[#313244] p-4 rounded-xl flex flex-col justify-between shadow-md">
+                <span class="text-xs text-[#a6adc8] font-bold">實測最小間隔 (Latency)</span>
+                <span id="stat-polling" class="text-3xl font-black text-[#cba6f7] mt-1">-- <span class="text-xs">ms</span></span>
+            </div>
+            <!-- 鎖定狀態指示燈 -->
+            <div class="bg-[#181825] border border-[#313244] p-4 rounded-xl flex flex-col justify-center gap-1 shadow-md">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-[#a6adc8]">Caps Lock</span>
+                    <div id="led-caps" class="w-2.5 h-2.5 rounded-full bg-gray-600 transition-all"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-[#a6adc8]">Num Lock</span>
+                    <div id="led-num" class="w-2.5 h-2.5 rounded-full bg-gray-600 transition-all"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-[#a6adc8]">Scroll Lock</span>
+                    <div id="led-scroll" class="w-2.5 h-2.5 rounded-full bg-gray-600 transition-all"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 實體模擬鍵盤核心元件 -->
+        <section class="bg-[#1e1e2e] border-2 border-[#313244] p-6 rounded-2xl shadow-2xl overflow-x-auto relative">
+            
+            <!-- 浮動快捷鍵攔截提示 -->
+            <div class="absolute top-2 right-4 text-[10px] text-[#a6adc8] flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>系統級與瀏覽器快捷鍵已全面攔截覆蓋 (F1-F12, PrtSc, Alt, Tab, Backspace)</span>
+            </div>
+
+            <div class="key-board-container flex justify-start mx-auto w-fit">
+                
+                <!-- 1. 主鍵盤區 (Alphanumeric & Function) -->
+                <div id="section-alpha" class="flex-shrink-0">
+                    <!-- F區 -->
+                    <div class="key-row" id="row-f-keys"></div>
+                    <div class="h-3"></div> <!-- 實體鍵盤 F 區與數字區的間隙 -->
+                    <!-- 主鍵 Row 1 -->
+                    <div class="key-row" id="row-alpha-1"></div>
+                    <!-- 主鍵 Row 2 -->
+                    <div class="key-row" id="row-alpha-2"></div>
+                    <!-- 主鍵 Row 3 -->
+                    <div class="key-row" id="row-alpha-3"></div>
+                    <!-- 主鍵 Row 4 -->
+                    <div class="key-row" id="row-alpha-4"></div>
+                    <!-- 主鍵 Row 5 -->
+                    <div class="key-row" id="row-alpha-5"></div>
+                </div>
+
+                <!-- 2. 控制與方向鍵區 (Editing & Navigation) -->
+                <div id="section-nav" class="flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <!-- 控制頂部 -->
+                        <div class="key-row" id="row-nav-f"></div>
+                        <div class="h-3"></div>
+                        <!-- 控制編輯區 -->
+                        <div class="key-row" id="row-nav-edit-1"></div>
+                        <div class="key-row" id="row-nav-edit-2"></div>
+                        <div class="key-row" id="row-nav-edit-3"></div>
+                    </div>
+                    <div>
+                        <!-- 方向鍵 -->
+                        <div class="key-row justify-center" id="row-arrows-up"></div>
+                        <div class="key-row" id="row-arrows-down"></div>
+                    </div>
+                </div>
+
+                <!-- 3. 數字小鍵盤區 (Numpad) -->
+                <div id="section-numpad" class="flex-shrink-0">
+                    <!-- 頂部多媒體或空白 -->
+                    <div class="key-row" id="row-numpad-f"></div>
+                    <div class="h-3"></div>
+                    <!-- 數字鍵盤主格 -->
+                    <div class="grid grid-cols-4 gap-[var(--key-gap)]" id="numpad-grid" style="width: calc(var(--key-size) * 4 + var(--key-gap) * 3);">
+                        <!-- 由 JavaScript 動態填入 -->
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- NKRO 獨立極限無衝測試站 -->
+        <section class="bg-[#181825] border border-[#313244] p-5 rounded-2xl shadow-xl">
+            <div class="flex flex-wrap items-center justify-between border-b border-[#313244] pb-3 mb-4 gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold border border-emerald-500/30">
+                        N
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-black text-white">NKRO 極限多鍵無衝測試站 (Dedicated Rollover Analyzer)</h2>
+                        <p class="text-[11px] text-[#a6adc8]">獨立專用測試站：量測鍵盤實體訊號傳輸瓶頸與鬼鍵阻斷率</p>
+                    </div>
+                </div>
+
+                <!-- NKRO 專用控制器 -->
+                <div class="flex items-center gap-2">
+                    <button id="btn-nkro-lock" onclick="toggleNkroLock()" class="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:scale-95 text-white rounded-lg text-xs font-bold shadow transition-all">
+                        🔓 進入「最高峰值鎖定模式」
+                    </button>
+                    <button onclick="clearNkroPeak()" class="px-3 py-1.5 bg-[#313244] hover:bg-[#45475a] text-[#cdd6f4] rounded-lg text-xs font-bold shadow transition-all">
+                        清除峰值
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                <!-- 1. 當前無衝性能分析指標 -->
+                <div class="lg:col-span-4 bg-[#11111b] p-4 rounded-xl border border-[#313244] flex flex-col justify-between gap-4">
+                    <div>
+                        <div class="text-xs text-[#a6adc8] font-bold">鍵盤無衝等級評估</div>
+                        <div id="nkro-badge" class="text-2xl font-black text-[#a6e3a1] mt-1">
+                            尚未開始測試
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-[#9399b2] leading-relaxed">
+                            <strong>等級提示：</strong><br>
+                            - <span class="text-[#f38ba8]">Legacy (2KRO/3KRO)</span>: 低階辦公鍵盤，不適合電競。<br>
+                            - <span class="text-[#f9e2af]">USB-Standard (6KRO)</span>: 標準 USB 限制，同時間最多送出 6 個有效鍵。<br>
+                            - <span class="text-[#a6e3a1]">True NKRO (全無衝)</span>: 電競核心技術，支援任意十指同按。
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 2. 最大壓下鍵盤峰值記錄區 -->
+                <div class="lg:col-span-5 bg-[#11111b] p-4 rounded-xl border border-[#313244] flex flex-col">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs text-[#a6adc8] font-bold">已捕獲之最高瞬時同按組合鍵 (Peak Cluster)</span>
+                        <span id="nkro-peak-count" class="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-black">0 Keys</span>
+                    </div>
+                    <div id="nkro-peak-keys" class="flex flex-wrap gap-2 p-3 bg-[#181825] rounded-lg border border-[#313244]/80 flex-grow min-h-[70px] content-start items-center">
+                        <span class="text-xs text-[#585b70] italic">尚未捕獲到高難度多鍵同按信號... 請用雙手手掌同時壓下鍵盤進行測試！</span>
+                    </div>
+                </div>
+
+                <!-- 3. 常見遊戲熱門組合鍵一鍵盲測區 -->
+                <div class="lg:col-span-3 bg-[#11111b] p-4 rounded-xl border border-[#313244] flex flex-col justify-between">
+                    <div>
+                        <span class="text-xs text-[#a6adc8] font-bold block mb-2">常用衝突熱區一鍵盲測</span>
+                        <div class="space-y-2">
+                            <button onclick="highlightNkroGroup(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft'])" class="w-full text-left p-1.5 bg-[#181825] hover:bg-[#313244] rounded border border-[#313244]/80 text-[11px] flex justify-between items-center transition-all">
+                                <span>🔫 FPS 極速急停組合</span>
+                                <span class="font-mono text-[9px] bg-indigo-500/10 text-indigo-400 px-1 py-0.2 rounded">WASD+Space+LShift</span>
+                            </button>
+                            <button onclick="highlightNkroGroup(['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyD', 'KeyF'])" class="w-full text-left p-1.5 bg-[#181825] hover:bg-[#313244] rounded border border-[#313244]/80 text-[11px] flex justify-between items-center transition-all">
+                                <span>⚔️ MOBA 神速連招組合</span>
+                                <span class="font-mono text-[9px] bg-indigo-500/10 text-indigo-400 px-1 py-0.2 rounded">QWER + DF</span>
+                            </button>
+                            <button onclick="highlightNkroGroup(['KeyS', 'KeyD', 'KeyF', 'Space', 'KeyJ', 'KeyK', 'KeyL'])" class="w-full text-left p-1.5 bg-[#181825] hover:bg-[#313244] rounded border border-[#313244]/80 text-[11px] flex justify-between items-center transition-all">
+                                <span>🎵 勁樂/音遊 7K 排列</span>
+                                <span class="font-mono text-[9px] bg-indigo-500/10 text-indigo-400 px-1 py-0.2 rounded">SDF+Spc+JKL</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-[10px] text-[#585b70] mt-2 italic">
+                        * 點擊可於上方虛擬鍵盤閃爍標示該鍵組，以利進行壓力同按。
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ⚡ CPS 點擊手速極限測試站 -->
+        <section class="bg-[#181825] border border-[#313244] p-5 rounded-2xl shadow-xl">
+            <div class="flex flex-wrap items-center justify-between border-b border-[#313244] pb-3 mb-4 gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 font-bold border border-indigo-500/30">
+                        ⚡
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-black text-white">CPS 點擊手速挑戰站 (Pro Click Per Second Station)</h2>
+                        <p class="text-[11px] text-[#a6adc8]">純速度極限測試：檢測您的滑鼠極限連點 (Mouse Click) 以及鍵盤單鍵超頻手速 (Keyboard Tap)</p>
+                    </div>
+                </div>
+
+                <!-- 測試模式與時長切換 -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- 測試模式 -->
+                    <div class="flex bg-[#11111b] p-1 rounded-lg border border-[#313244]">
+                        <button onclick="switchCpsMode('mouse')" id="btn-cps-mouse" class="px-2.5 py-1 rounded text-xs font-bold transition bg-[#313244] text-white">🖱️ 滑鼠點擊</button>
+                        <button onclick="switchCpsMode('keyboard')" id="btn-cps-key" class="px-2.5 py-1 rounded text-xs font-bold transition text-[#a6adc8] hover:text-white">⌨️ 鍵盤單鍵</button>
+                    </div>
+                    <!-- 時長 -->
+                    <div class="flex items-center gap-1.5 bg-[#11111b] px-2 py-1 rounded-lg border border-[#313244]">
+                        <span class="text-[11px] text-[#a6adc8] font-bold">計時:</span>
+                        <select id="select-cps-time" onchange="setCpsDuration()" class="bg-[#313244] text-white text-xs rounded px-1.5 py-0.5 outline-none border border-[#45475a] cursor-pointer">
+                            <option value="1">1 秒 (瞬發)</option>
+                            <option value="5" selected>5 秒 (標竿)</option>
+                            <option value="10">10 秒 (耐力)</option>
+                        </select>
+                    </div>
+                    <button onclick="resetCpsTest()" class="px-3 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-bold transition-all">
+                        重置挑戰
+                    </button>
+                </div>
+            </div>
+
+            <!-- CPS 主面板佈局 -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                <!-- 左側：巨型實體點擊挑戰區 -->
+                <div class="lg:col-span-6 bg-[#11111b] rounded-xl border border-[#313244] p-4 flex flex-col justify-between min-h-[190px]">
+                    <div id="cps-click-pad" 
+                         onmousedown="handleCpsPadMouseDown(event)" 
+                         class="cps-click-pad flex-grow bg-[#1e1e2e] border-2 border-dashed border-indigo-500/30 hover:border-indigo-500/60 hover:bg-indigo-500/[0.02] active:bg-indigo-500/[0.05] rounded-lg flex flex-col items-center justify-center p-6 cursor-pointer relative overflow-hidden select-none">
+                        
+                        <!-- 動態進度條背景 -->
+                        <div id="cps-progress-bg" class="absolute left-0 bottom-0 top-0 bg-indigo-500/10 transition-all duration-75 pointer-events-none" style="width: 0%"></div>
+                        
+                        <div class="relative z-10 text-center pointer-events-none">
+                            <span id="cps-pad-instruction" class="text-xs text-[#a6adc8] font-medium tracking-wide">
+                                點擊此區域開始測試 (滑鼠模式 - 支援左右鍵)
+                            </span>
+                            <h2 id="cps-pad-big-text" class="text-4xl font-black text-white mt-2 select-none tracking-widest">
+                                READY
+                            </h2>
+                            <p id="cps-pad-locked-info" class="text-[10px] text-indigo-400 mt-1.5 font-bold invisible">
+                                已鎖定按鍵: [None]
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右側：實時數據看板與段位分析 -->
+                <div class="lg:col-span-6 grid grid-cols-2 gap-4">
+                    <!-- 1. 瞬時速度與累計次數 -->
+                    <div class="bg-[#11111b] p-4 rounded-xl border border-[#313244] flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs text-[#a6adc8] font-bold block">當前秒速 (Realtime CPS)</span>
+                            <div class="flex items-baseline gap-1.5 mt-2">
+                                <span id="cps-realtime-val" class="text-4xl font-black text-indigo-400">0.0</span>
+                                <span class="text-xs text-[#9399b2]">cps</span>
+                            </div>
+                        </div>
+                        <div class="border-t border-[#313244] pt-3 mt-3 flex justify-between items-center text-xs">
+                            <span class="text-[#a6adc8]">累計點擊:</span>
+                            <strong id="cps-total-clicks" class="text-white font-bold">0 次</strong>
+                        </div>
+                    </div>
+
+                    <!-- 2. 手速段位鑑定徽章 -->
+                    <div class="bg-[#11111b] p-4 rounded-xl border border-[#313244] flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs text-[#a6adc8] font-bold block">手速段位鑑定</span>
+                            <div id="cps-rank-badge" class="text-lg font-black text-emerald-400 mt-2 flex items-center gap-1.5">
+                                🐌 慢速樹懶
+                            </div>
+                        </div>
+                        <div class="border-t border-[#313244] pt-3 mt-3 flex justify-between items-center text-[10px]">
+                            <span class="text-[#a6adc8]">歷史最佳紀錄:</span>
+                            <strong id="cps-best-record" class="text-indigo-300 font-bold">🖱️ -- / ⌨️ --</strong>
+                        </div>
+                    </div>
+
+                    <!-- 3. 秒數進度、巔峰峰值 -->
+                    <div class="col-span-2 bg-[#11111b] p-3.5 rounded-xl border border-[#313244] flex items-center justify-between text-xs">
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[#a6adc8]">剩餘時間:</span>
+                            <strong id="cps-timer-val" class="text-white font-black text-sm">5.0s</strong>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[#a6adc8]">單次測試 CPS 峰值 (Peak):</span>
+                            <strong id="cps-peak-val" class="text-indigo-400 font-black text-sm">0.0 cps</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 數據統計與硬體紀錄器 -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- A. 當前按鍵物理屬性 -->
+            <div class="bg-[#181825] border border-[#313244] p-5 rounded-xl shadow-lg flex flex-col">
+                <h3 class="text-sm font-black text-white border-b border-[#313244] pb-2 mb-4 flex items-center justify-between">
+                    <span>當前按鍵物理屬性 (Current Signal)</span>
+                    <span class="text-xs bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded">實時物理層監控</span>
+                </h3>
+                <div class="grid grid-cols-2 gap-4 text-xs flex-grow">
+                    <div class="bg-[#11111b] p-3 rounded-lg border border-[#313244]">
+                        <span class="text-[#a6adc8] block">event.key (解譯碼)</span>
+                        <strong id="info-key" class="text-lg font-black text-[#89b4fa] mt-1 block">--</strong>
+                    </div>
+                    <div class="bg-[#11111b] p-3 rounded-lg border border-[#313244]">
+                        <span class="text-[#a6adc8] block">event.code (物理碼)</span>
+                        <strong id="info-code" class="text-lg font-black text-[#f9e2af] mt-1 block">--</strong>
+                    </div>
+                    <div class="bg-[#11111b] p-3 rounded-lg border border-[#313244]">
+                        <span class="text-[#a6adc8] block">event.keyCode (傳統鍵碼)</span>
+                        <strong id="info-keycode" class="text-lg font-black text-[#a6e3a1] mt-1 block">--</strong>
+                    </div>
+                    <div class="bg-[#11111b] p-3 rounded-lg border border-[#313244]">
+                        <span class="text-[#a6adc8] block">Key Location (物理區域)</span>
+                        <strong id="info-location" class="text-lg font-black text-[#cba6f7] mt-1 block">--</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- B. 高精密 Chattering (防連點故障) 診斷監視器 -->
+            <div class="bg-[#181825] border border-[#313244] p-5 rounded-xl shadow-lg flex flex-col">
+                <h3 class="text-sm font-black text-white border-b border-[#313244] pb-2 mb-3 flex items-center justify-between">
+                    <span>軸體物理抖動診斷 (Bounce Diagnostic)</span>
+                    <span class="text-xs bg-red-500/10 text-red-400 px-2 py-0.5 rounded">異常防抖檢測 (&lt; 15ms)</span>
+                </h3>
+                <div class="flex-grow overflow-y-auto max-h-[160px] text-xs space-y-2 pr-1" id="chatter-logs">
+                    <div class="text-[#a6adc8] italic text-center py-8">無檢測到物理連點異常。軸體健康度優異！</div>
+                </div>
+            </div>
+
+            <!-- C. 歷史訊號紀錄串流 (Key Signal Stream) -->
+            <div class="bg-[#181825] border border-[#313244] p-5 rounded-xl shadow-lg flex flex-col">
+                <h3 class="text-sm font-black text-white border-b border-[#313244] pb-2 mb-3 flex items-center justify-between">
+                    <span>物理按鍵信號流 (Signal Stream)</span>
+                    <button onclick="clearLogs()" class="text-[10px] text-[#f38ba8] hover:underline font-bold">清除日誌</button>
+                </h3>
+                <div class="flex-grow overflow-y-auto max-h-[160px] text-xs font-mono space-y-1.5 pr-1" id="event-logs">
+                    <div class="text-[#a6adc8] italic text-center py-8">等待實體按鍵輸入...</div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 測試指引說明 -->
+        <section class="bg-[#181825]/50 border border-[#313244] p-5 rounded-xl text-xs space-y-2">
+            <h4 class="font-bold text-white text-sm">💡 鍵盤測試指南與診斷說明：</h4>
+            <ul class="list-disc list-inside text-[#a6adc8] space-y-1">
+                <li><strong class="text-[#89b4fa]">完整度測試：</strong>按壓鍵盤上的每一個鍵，螢幕上的對應鍵帽將從灰色變為 <span class="text-emerald-400">綠色</span>，代表該按鍵功能觸發正常。</li>
+                <li><strong class="text-[#a6e3a1]">NKRO 性能極限測試：</strong>同時間盡可能用雙掌壓下最多按鍵，系統會即時鎖定並分析在極短時間內送達的「最大瞬時並行按鍵組」。</li>
+                <li><strong class="text-[#f38ba8]">⚡ CPS 點擊測試指南：</strong>選定模式與時長後，**在鍵盤上壓下單個實體鍵（或滑鼠左右鍵點擊壓板）即刻自動倒數開跑**。</li>
+                <li><strong class="text-[#f38ba8]">⚠️ 冷卻鎖定機制：</strong>為防止高頻測試導致數據重疊干擾或硬體過度損耗，測試結束後將會進入 10 秒鐘的強制冷卻期，此時無法再次觸發，請耐心等待倒數結束。</li>
+                <li><strong class="text-[#f9e2af]">連點異常警告 (Chattering)：</strong>當釋放按鍵後，若在極短時間內（15毫秒內）再次偵測到物理按下訊號，系統判定為軸體彈片氧化或機械抖動，將發出紅色高警報，並在虛擬鍵盤上將該鍵標示為黃橙色，提示可能損壞。</li>
+                <li><strong class="text-[#cba6f7]">超低延遲音效：</strong>重新設計 of Web Audio 合成器已使用「預熱模式」與「靜態緩衝池」，將延遲降低至硬體極限。</li>
+            </ul>
+        </section>
+    </main>
+
+    <!-- 底部版權 -->
+    <footer class="border-t border-[#313244] bg-[#11111b] py-4 text-center text-xs text-[#585b70]">
+        鍵盤功能與連點檢測機 &copy; 2026. 完整功能設計與物理信號診斷。
+    </footer>
+
+    <!-- 通知小彈窗 -->
+    <div id="toast" class="fixed bottom-6 right-6 px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-2xl transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        已成功複製鍵盤測試完整度報告！
+    </div>
+
+    <script>
+        // --- 1. Web Audio API 機械軸聲波合成器 (低延遲預熱 + 靜態雜音緩衝區設計) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+        let staticNoiseBuffer = null; // 預分配雜音緩衝池，消除 Thocky 發聲時的動態分配延遲
+
+        function initAudio() {
+            if (!audioCtx) {
+                // 設定最高優先權互動等級以最小化系統回饋延遲
+                audioCtx = new AudioContext({ latencyHint: 'interactive' });
+                
+                // 預先生成 Thocky(麻將軸) 專用的高飽和度白雜訊 buffer 區 (2 秒長度)
+                const sampleRate = audioCtx.sampleRate;
+                staticNoiseBuffer = audioCtx.createBuffer(1, sampleRate * 2, sampleRate);
+                const channelData = staticNoiseBuffer.getChannelData(0);
+                for (let i = 0; i < channelData.length; i++) {
+                    channelData[i] = Math.random() * 2 - 1;
+                }
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        // 監聽全局第一次操作進行熱身，消除後續首按的 10-20ms 起跳延遲
+        const warmUpEvents = ['mousedown', 'keydown', 'touchstart'];
+        const warmUpHandler = () => {
+            initAudio();
+            warmUpEvents.forEach(evt => window.removeEventListener(evt, warmUpHandler));
+        };
+        warmUpEvents.forEach(evt => window.addEventListener(evt, warmUpHandler));
+
+        // 核心高階雙向音效合成引擎 (action 可為 'down' 或 'up')
+        function playSwitchSound(type, action = 'down') {
+            if (type === 'none') return;
+            initAudio();
+            if (!audioCtx) return;
+
+            // 抓取極精確時間線
+            const now = audioCtx.currentTime;
+
+            if (type === 'blue') {
+                if (action === 'down') {
+                    // 青軸按下: 高頻金屬片咔嗒 + 空腔木槌
+                    const clickOsc = audioCtx.createOscillator();
+                    const clickGain = audioCtx.createGain();
+                    clickOsc.type = 'triangle';
+                    clickOsc.frequency.setValueAtTime(3400, now);
+                    clickOsc.frequency.exponentialRampToValueAtTime(1400, now + 0.004);
+                    clickGain.gain.setValueAtTime(0.18, now);
+                    clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.007);
+
+                    const popOsc = audioCtx.createOscillator();
+                    const popGain = audioCtx.createGain();
+                    popOsc.type = 'sine';
+                    popOsc.frequency.setValueAtTime(155, now);
+                    popOsc.frequency.exponentialRampToValueAtTime(65, now + 0.03);
+                    popGain.gain.setValueAtTime(0.4, now);
+                    popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+
+                    clickOsc.connect(clickGain);
+                    clickGain.connect(audioCtx.destination);
+                    popOsc.connect(popGain);
+                    popGain.connect(audioCtx.destination);
+
+                    clickOsc.start(now);
+                    clickOsc.stop(now + 0.01);
+                    popOsc.start(now);
+                    popOsc.stop(now + 0.05);
+                } else {
+                    // 青軸放開: 微弱回彈簧力聲
+                    const springOsc = audioCtx.createOscillator();
+                    const springGain = audioCtx.createGain();
+                    springOsc.type = 'sine';
+                    springOsc.frequency.setValueAtTime(2200, now);
+                    springOsc.frequency.exponentialRampToValueAtTime(1800, now + 0.005);
+                    springGain.gain.setValueAtTime(0.04, now);
+                    springGain.gain.exponentialRampToValueAtTime(0.001, now + 0.006);
+
+                    springOsc.connect(springGain);
+                    springGain.connect(audioCtx.destination);
+                    springOsc.start(now);
+                    springOsc.stop(now + 0.01);
+                }
+
+            } else if (type === 'brown') {
+                if (action === 'down') {
+                    // 茶軸按下: 微弱摩擦段落 + 柔和觸底
+                    const popOsc = audioCtx.createOscillator();
+                    const popGain = audioCtx.createGain();
+                    popOsc.type = 'triangle';
+                    popOsc.frequency.setValueAtTime(120, now);
+                    popOsc.frequency.exponentialRampToValueAtTime(55, now + 0.03);
+                    popGain.gain.setValueAtTime(0.3, now);
+                    popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+
+                    const clickOsc = audioCtx.createOscillator();
+                    const clickGain = audioCtx.createGain();
+                    clickOsc.type = 'sine';
+                    clickOsc.frequency.setValueAtTime(1300, now);
+                    clickGain.gain.setValueAtTime(0.04, now);
+                    clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.006);
+
+                    popOsc.connect(popGain);
+                    popGain.connect(audioCtx.destination);
+                    clickOsc.connect(clickGain);
+                    clickGain.connect(audioCtx.destination);
+
+                    popOsc.start(now);
+                    popOsc.stop(now + 0.04);
+                    clickOsc.start(now);
+                    clickOsc.stop(now + 0.01);
+                } else {
+                    // 茶軸放開: 柔和塑膠反彈
+                    const upOsc = audioCtx.createOscillator();
+                    const upGain = audioCtx.createGain();
+                    upOsc.type = 'sine';
+                    upOsc.frequency.setValueAtTime(450, now);
+                    upOsc.frequency.exponentialRampToValueAtTime(300, now + 0.01);
+                    upGain.gain.setValueAtTime(0.06, now);
+                    upGain.gain.exponentialRampToValueAtTime(0.001, now + 0.012);
+
+                    upOsc.connect(upGain);
+                    upGain.connect(audioCtx.destination);
+                    upOsc.start(now);
+                    upOsc.stop(now + 0.015);
+                }
+
+            } else if (type === 'red') {
+                if (action === 'down') {
+                    // 紅軸按下: 乾淨無阻觸底
+                    const popOsc = audioCtx.createOscillator();
+                    const popGain = audioCtx.createGain();
+                    popOsc.type = 'sine';
+                    popOsc.frequency.setValueAtTime(95, now);
+                    popOsc.frequency.exponentialRampToValueAtTime(45, now + 0.045);
+                    popGain.gain.setValueAtTime(0.35, now);
+                    popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+                    popOsc.connect(popGain);
+                    popGain.connect(audioCtx.destination);
+                    popOsc.start(now);
+                    popOsc.stop(now + 0.06);
+                } else {
+                    // 紅軸放開: 俐落的反彈撞擊頂殼
+                    const upOsc = audioCtx.createOscillator();
+                    const upGain = audioCtx.createGain();
+                    upOsc.type = 'triangle';
+                    upOsc.frequency.setValueAtTime(280, now);
+                    upOsc.frequency.exponentialRampToValueAtTime(180, now + 0.01);
+                    upGain.gain.setValueAtTime(0.08, now);
+                    upGain.gain.exponentialRampToValueAtTime(0.001, now + 0.012);
+
+                    upOsc.connect(upGain);
+                    upGain.connect(audioCtx.destination);
+                    upOsc.start(now);
+                    upOsc.stop(now + 0.015);
+                }
+
+            } else if (type === 'black') {
+                if (action === 'down') {
+                    // 黑軸按下: 重壓觸底，低頻重音 thud
+                    const popOsc = audioCtx.createOscillator();
+                    const popGain = audioCtx.createGain();
+                    popOsc.type = 'sine';
+                    popOsc.frequency.setValueAtTime(80, now);
+                    popOsc.frequency.exponentialRampToValueAtTime(35, now + 0.055);
+                    popGain.gain.setValueAtTime(0.55, now);
+                    popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+                    popOsc.connect(popGain);
+                    popGain.connect(audioCtx.destination);
+                    popOsc.start(now);
+                    popOsc.stop(now + 0.07);
+                } else {
+                    // 黑軸放開: 沉重彈簧反推
+                    const upOsc = audioCtx.createOscillator();
+                    const upGain = audioCtx.createGain();
+                    upOsc.type = 'sine';
+                    upOsc.frequency.setValueAtTime(190, now);
+                    upOsc.frequency.exponentialRampToValueAtTime(100, now + 0.015);
+                    upGain.gain.setValueAtTime(0.12, now);
+                    upGain.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
+
+                    upOsc.connect(upGain);
+                    upGain.connect(audioCtx.destination);
+                    upOsc.start(now);
+                    upOsc.stop(now + 0.02);
+                }
+
+            } else if (type === 'thocky') {
+                // 客製麻將軸 (HiFi 石子音): 採用預分配雜音緩衝區，杜絕 GC 延遲
+                if (action === 'down') {
+                    // 1. 低頻共鳴
+                    const thockOsc = audioCtx.createOscillator();
+                    const thockGain = audioCtx.createGain();
+                    thockOsc.type = 'sine';
+                    thockOsc.frequency.setValueAtTime(140, now);
+                    thockOsc.frequency.exponentialRampToValueAtTime(60, now + 0.06);
+                    thockGain.gain.setValueAtTime(0.7, now);
+                    thockGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+
+                    // 2. 引流預存白雜音
+                    let noiseNode = audioCtx.createBufferSource();
+                    noiseNode.buffer = staticNoiseBuffer || audioCtx.createBuffer(1, 10, audioCtx.sampleRate);
+                    
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.setValueAtTime(450, now);
+                    filter.Q.setValueAtTime(5, now);
+
+                    const noiseGain = audioCtx.createGain();
+                    noiseGain.gain.setValueAtTime(0.25, now);
+                    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
+
+                    noiseNode.connect(filter);
+                    filter.connect(noiseGain);
+                    noiseGain.connect(audioCtx.destination);
+                    thockOsc.connect(thockGain);
+                    thockGain.connect(audioCtx.destination);
+
+                    // 隨機起點播放 white noise 避免聲波單調
+                    const randOffset = Math.random() * 1.5;
+                    noiseNode.start(now, randOffset, 0.02);
+                    thockOsc.start(now);
+                    thockOsc.stop(now + 0.08);
+                } else {
+                    // 麻將軸放開: 高保真回彈
+                    const upOsc = audioCtx.createOscillator();
+                    const upGain = audioCtx.createGain();
+                    upOsc.type = 'sine';
+                    upOsc.frequency.setValueAtTime(260, now);
+                    upOsc.frequency.exponentialRampToValueAtTime(150, now + 0.025);
+                    upGain.gain.setValueAtTime(0.18, now);
+                    upGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+
+                    upOsc.connect(upGain);
+                    upGain.connect(audioCtx.destination);
+                    upOsc.start(now);
+                    upOsc.stop(now + 0.035);
+                }
+
+            } else if (type === 'silent') {
+                if (action === 'down') {
+                    // 靜音軸: 極小、柔和的阻尼低頻 thud
+                    const popOsc = audioCtx.createOscillator();
+                    const popGain = audioCtx.createGain();
+                    popOsc.type = 'sine';
+                    popOsc.frequency.setValueAtTime(65, now);
+                    popOsc.frequency.exponentialRampToValueAtTime(30, now + 0.02);
+                    popGain.gain.setValueAtTime(0.12, now);
+                    popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+
+                    popOsc.connect(popGain);
+                    popGain.connect(audioCtx.destination);
+                    popOsc.start(now);
+                    popOsc.stop(now + 0.03);
+                } else {
+                    // 靜音軸放開: 幾乎無聲的柔化接觸
+                    const upOsc = audioCtx.createOscillator();
+                    const upGain = audioCtx.createGain();
+                    upOsc.type = 'sine';
+                    upOsc.frequency.setValueAtTime(100, now);
+                    upOsc.frequency.exponentialRampToValueAtTime(60, now + 0.01);
+                    upGain.gain.setValueAtTime(0.03, now);
+                    upGain.gain.exponentialRampToValueAtTime(0.001, now + 0.012);
+
+                    upOsc.connect(upGain);
+                    upGain.connect(audioCtx.destination);
+                    upOsc.start(now);
+                    upOsc.stop(now + 0.015);
+                }
+            }
+        }
+
+
+        // --- 2. 鍵盤配置數據佈局 (100% 全尺寸數據) ---
+        const SECTION_ALPHA_LAYOUT = [
+            // Row F (Function keys)
+            [
+                { code: 'Escape', label: 'Esc', u: 1 },
+                { spacer: true, u: 0.5 },
+                { code: 'F1', label: 'F1', u: 1 }, { code: 'F2', label: 'F2', u: 1 }, { code: 'F3', label: 'F3', u: 1 }, { code: 'F4', label: 'F4', u: 1 },
+                { spacer: true, u: 0.5 },
+                { code: 'F5', label: 'F5', u: 1 }, { code: 'F6', label: 'F6', u: 1 }, { code: 'F7', label: 'F7', u: 1 }, { code: 'F8', label: 'F8', u: 1 },
+                { spacer: true, u: 0.5 },
+                { code: 'F9', label: 'F9', u: 1 }, { code: 'F10', label: 'F10', u: 1 }, { code: 'F11', label: 'F11', u: 1 }, { code: 'F12', label: 'F12', u: 1 }
+            ],
+            // Row 1 (Numbers)
+            [
+                { code: 'Backquote', label: '~\n`', u: 1 },
+                { code: 'Digit1', label: '!\n1', u: 1 }, { code: 'Digit2', label: '@\n2', u: 1 }, { code: 'Digit3', label: '#\n3', u: 1 }, { code: 'Digit4', label: '$\n4', u: 1 },
+                { code: 'Digit5', label: '%\n5', u: 1 }, { code: 'Digit6', label: '^\n6', u: 1 }, { code: 'Digit7', label: '&\n7', u: 1 }, { code: 'Digit8', label: '*\n8', u: 1 },
+                { code: 'Digit9', label: '(\n9', u: 1 }, { code: 'Digit0', label: ')\n0', u: 1 },
+                { code: 'Minus', label: '_\n-', u: 1 }, { code: 'Equal', label: '+\n=', u: 1 },
+                { code: 'Backspace', label: 'Backspace', u: 2 }
+            ],
+            // Row 2 (QWERTY)
+            [
+                { code: 'Tab', label: 'Tab', u: 1.5 },
+                { code: 'KeyQ', label: 'Q', u: 1 }, { code: 'KeyW', label: 'W', u: 1 }, { code: 'KeyE', label: 'E', u: 1 }, { code: 'KeyR', label: 'R', u: 1 },
+                { code: 'KeyT', label: 'T', u: 1 }, { code: 'KeyY', label: 'Y', u: 1 }, { code: 'KeyU', label: 'U', u: 1 }, { code: 'KeyI', label: 'I', u: 1 },
+                { code: 'KeyO', label: 'O', u: 1 }, { code: 'KeyP', label: 'P', u: 1 },
+                { code: 'BracketLeft', label: '{\n[', u: 1 }, { code: 'BracketRight', label: '}\n]', u: 1 },
+                { code: 'Backslash', label: '|\n\\', u: 1.5 }
+            ],
+            // Row 3 (ASDF)
+            [
+                { code: 'CapsLock', label: 'Caps Lock', u: 1.75 },
+                { code: 'KeyA', label: 'A', u: 1 }, { code: 'KeyS', label: 'S', u: 1 }, { code: 'KeyD', label: 'D', u: 1 }, { code: 'KeyF', label: 'F', u: 1 },
+                { code: 'KeyG', label: 'G', u: 1 }, { code: 'KeyH', label: 'H', u: 1 }, { code: 'KeyJ', label: 'J', u: 1 }, { code: 'KeyK', label: 'K', u: 1 },
+                { code: 'KeyL', label: 'L', u: 1 },
+                { code: 'Semicolon', label: ':\n;', u: 1 }, { code: 'Quote', label: '"\n\'', u: 1 },
+                { code: 'Enter', label: 'Enter', u: 2.25 }
+            ],
+            // Row 4 (Shift Row)
+            [
+                { code: 'ShiftLeft', label: 'Shift', u: 2.25 },
+                { code: 'KeyZ', label: 'Z', u: 1 }, { code: 'KeyX', label: 'X', u: 1 }, { code: 'KeyC', label: 'C', u: 1 }, { code: 'KeyV', label: 'V', u: 1 },
+                { code: 'KeyB', label: 'B', u: 1 }, { code: 'KeyN', label: 'N', u: 1 }, { code: 'KeyM', label: 'M', u: 1 },
+                { code: 'Comma', label: '<\n,', u: 1 }, { code: 'Period', label: '>\n.', u: 1 }, { code: 'Slash', label: '?\n/', u: 1 },
+                { code: 'ShiftRight', label: 'Shift', u: 2.75 }
+            ],
+            // Row 5 (Bottom Modifiers)
+            [
+                { code: 'ControlLeft', label: 'Ctrl', u: 1.25 },
+                { code: 'MetaLeft', label: 'Win', u: 1.25 },
+                { code: 'AltLeft', label: 'Alt', u: 1.25 },
+                { code: 'Space', label: 'Spacebar', u: 6.25 },
+                { code: 'AltRight', label: 'Alt', u: 1.25 },
+                { code: 'MetaRight', label: 'Win', u: 1.25 },
+                { code: 'ContextMenu', label: 'Menu', u: 1.25 },
+                { code: 'ControlRight', label: 'Ctrl', u: 1.25 }
+            ]
+        ];
+
+        const SECTION_NAV_LAYOUT = {
+            rowNavF: [
+                { code: 'PrintScreen', label: 'PrtSc', u: 1 },
+                { code: 'ScrollLock', label: 'ScrLk', u: 1 },
+                { code: 'Pause', label: 'Pause', u: 1 }
+            ],
+            rowEdit1: [
+                { code: 'Insert', label: 'Ins', u: 1 },
+                { code: 'Home', label: 'Home', u: 1 },
+                { code: 'PageUp', label: 'PgUp', u: 1 }
+            ],
+            rowEdit2: [
+                { code: 'Delete', label: 'Del', u: 1 },
+                { code: 'End', label: 'End', u: 1 },
+                { code: 'PageDown', label: 'PgDn', u: 1 }
+            ],
+            rowEdit3: [
+                { spacer: true, u: 3 } 
+            ],
+            arrowsUp: [
+                { code: 'ArrowUp', label: '▲', u: 1 }
+            ],
+            arrowsDown: [
+                { code: 'ArrowLeft', label: '◀', u: 1 },
+                { code: 'ArrowDown', label: '▼', u: 1 },
+                { code: 'ArrowRight', label: '▶', u: 1 }
+            ]
+        };
+
+        const SECTION_NUMPAD_LAYOUT = {
+            topRow: [
+                { code: 'Equal', label: '=', u: 1 },
+                { code: 'VolumeMute', label: '🔇', u: 1 },
+                { code: 'VolumeDown', label: '🔉', u: 1 },
+                { code: 'VolumeUp', label: '🔊', u: 1 }
+            ],
+            gridKeys: [
+                { code: 'NumLock', label: 'Num\nLk', colSpan: 1, rowSpan: 1 },
+                { code: 'NumpadDivide', label: '/', colSpan: 1, rowSpan: 1 },
+                { code: 'NumpadMultiply', label: '*', colSpan: 1, rowSpan: 1 },
+                { code: 'NumpadSubtract', label: '-', colSpan: 1, rowSpan: 1 },
+
+                { code: 'Numpad7', label: '7\nHome', colSpan: 1, rowSpan: 1 },
+                { code: 'Numpad8', label: '8\n▲', colSpan: 1, rowSpan: 1 },
+                { code: 'Numpad9', label: '9\nPgUp', colSpan: 1, rowSpan: 1 },
+                { code: 'NumpadAdd', label: '+', colSpan: 1, rowSpan: 2, heightClass: 'h-full' },
+
+                { code: 'Numpad4', label: '4\n◀', colSpan: 1, rowSpan: 1 },
+                { code: 'Numpad5', label: '5', colSpan: 1, rowSpan: 1 },
+                { code: 'Numpad6', label: '6\n▶', colSpan: 1, rowSpan: 1 },
+
+                { code: 'Numpad1', label: '1\nEnd', colSpan: 1, rowSpan: 1 },
+                { code: 'Numpad2', label: '2\n▼', colSpan: 1, rowSpan: 1 },
+                { code: 'Numpad3', label: '3\nPgDn', colSpan: 1, rowSpan: 1 },
+                { code: 'NumpadEnter', label: 'Ent', colSpan: 1, rowSpan: 2, heightClass: 'h-full' },
+
+                { code: 'Numpad0', label: '0\nIns', colSpan: 2, rowSpan: 1 },
+                { code: 'NumpadDecimal', label: '.', colSpan: 1, rowSpan: 1 }
+            ]
+        };
+
+        // --- 3. 測試狀態核心控制與物件變數 ---
+        let pressedKeys = new Set();    
+        let testedKeys = new Set();     
+        let chatterKeys = new Map();    
+        let lastReleaseTime = {};       
+        let lastPressTime = {};         
+        let maxKro = 0;                 
+        let totalKeysInLayout = 104;    
+        let minInterval = Infinity;     
+        let currentLayout = 'full';     
+
+        let nkroPeakKeys = [];          
+        let nkroPeakLocked = false;     
+
+        // ⚡ 新增：CPS 挑戰模組變數
+        let cpsMode = 'mouse';          // 'mouse' or 'keyboard'
+        let cpsDuration = 5;            // 預設時長 5 秒
+        let cpsActive = false;          // 是否正在測試中
+        let cpsClicks = 0;              // 點擊計數
+        let cpsTimeRemaining = 5.0;     // 賸餘時間
+        let cpsStartTime = null;        // 開始時間戳
+        let cpsTimerInterval = null;    // 刷新動畫與計時的 Interval
+        let cpsLockedKey = null;        // 鍵盤單鍵模式下被鎖定的 Key Code
+        let cpsPeak = 0.0;              // 單次測試的最高 CPS
+        let cpsBestMouse = 0.0;         // 歷史滑鼠最佳
+        let cpsBestKeyboard = 0.0;      // 歷史鍵盤最佳
+        let cpsClickTimestamps = [];    // 用於滾動計算 1s 內真實 CPS
+        let cpsCooldownActive = false;  // ⚡ 新增：防連點冷卻鎖定狀態
+        let cpsCooldownInterval = null; // ⚡ 新增：冷卻計時器
+
+        // 主題色配置
+        const THEMES = {
+            stealth: {
+                bg: 'bg-[#1e1e2e]',
+                keycapDefault: 'bg-[#313244] text-[#cdd6f4] border-[#181825]',
+                keycapTested: 'bg-[#a6e3a1] text-[#11111b] border-[#89dceb] shadow-[#a6e3a1]/20',
+                keycapActive: 'bg-[#89b4fa] text-[#11111b] border-[#b4befe] shadow-[#89b4fa]/30',
+                keycapChatter: 'bg-[#f38ba8] text-[#11111b] border-[#eba0ac] shadow-[#f38ba8]/40'
+            },
+            cyberpunk: {
+                bg: 'bg-[#11052C]',
+                keycapDefault: 'bg-[#3D087B] text-[#FF4C29] border-[#0D0221]',
+                keycapTested: 'bg-[#00D7FF] text-[#0D0221] border-[#00FFFF] shadow-[#00D7FF]/30',
+                keycapActive: 'bg-[#F806CC] text-[#white] border-[#FF007F] shadow-[#F806CC]/40',
+                keycapChatter: 'bg-[#FFE400] text-[#0D0221] border-[#FFD700] shadow-[#FFE400]/40'
+            },
+            retro: {
+                bg: 'bg-[#D2D2D2]',
+                keycapDefault: 'bg-[#E0E0E0] text-[#333333] border-[#A0A0A0]',
+                keycapTested: 'bg-[#8E9B84] text-white border-[#6E7B64] shadow-[#8E9B84]/25',
+                keycapActive: 'bg-[#4A6FA5] text-white border-[#34547A] shadow-[#4A6FA5]/30',
+                keycapChatter: 'bg-[#D96B27] text-white border-[#B2531B] shadow-[#D96B27]/40'
+            }
+        };
+
+        // --- 4. 畫面渲染與構建 ---
+        function createKeyElement(keyObj) {
+            if (keyObj.spacer) {
+                const spacer = document.createElement('div');
+                spacer.className = 'flex-shrink-0';
+                spacer.style.width = `calc(var(--key-size) * ${keyObj.u})`;
+                return spacer;
+            }
+
+            const keyEl = document.createElement('div');
+            keyEl.id = `key-${keyObj.code}`;
+            keyEl.className = `keycap flex-shrink-0 select-none transition-all`;
+            keyEl.style.width = `calc(var(--key-size) * ${keyObj.u || 1})`;
+            keyEl.setAttribute('data-code', keyObj.code);
+
+            keyEl.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                simulateKeyPress(keyObj.code);
+            });
+            keyEl.addEventListener('mouseup', (e) => {
+                e.preventDefault();
+                simulateKeyRelease(keyObj.code);
+            });
+
+            const labelSpan = document.createElement('span');
+            labelSpan.innerText = keyObj.label;
+            labelSpan.className = "text-center whitespace-pre-line leading-tight pointer-events-none";
+            keyEl.appendChild(labelSpan);
+
+            if (keyObj.u && keyObj.u >= 1.5) {
+                keyEl.classList.add('px-2');
+            }
+
+            return keyEl;
+        }
+
+        function createNumpadElement(keyObj) {
+            const keyEl = document.createElement('div');
+            keyEl.id = `key-${keyObj.code}`;
+            keyEl.className = `keycap select-none transition-all ${keyObj.heightClass || ''}`;
+            keyEl.style.gridColumn = `span ${keyObj.colSpan}`;
+            keyEl.style.gridRow = `span ${keyObj.rowSpan}`;
+            keyEl.setAttribute('data-code', keyObj.code);
+
+            if (keyObj.rowSpan && keyObj.rowSpan > 1) {
+                keyEl.style.height = `calc(var(--key-size) * ${keyObj.rowSpan} + var(--key-gap) * ${keyObj.rowSpan - 1})`;
+                keyEl.style.justifyContent = 'center';
+            }
+
+            keyEl.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                simulateKeyPress(keyObj.code);
+            });
+            keyEl.addEventListener('mouseup', (e) => {
+                e.preventDefault();
+                simulateKeyRelease(keyObj.code);
+            });
+
+            const labelSpan = document.createElement('span');
+            labelSpan.innerText = keyObj.label;
+            labelSpan.className = "text-center whitespace-pre-line leading-tight pointer-events-none";
+            keyEl.appendChild(labelSpan);
+
+            return keyEl;
+        }
+
+        function renderKeyboard() {
+            const alphaContainers = [
+                { id: 'row-f-keys', data: SECTION_ALPHA_LAYOUT[0] },
+                { id: 'row-alpha-1', data: SECTION_ALPHA_LAYOUT[1] },
+                { id: 'row-alpha-2', data: SECTION_ALPHA_LAYOUT[2] },
+                { id: 'row-alpha-3', data: SECTION_ALPHA_LAYOUT[3] },
+                { id: 'row-alpha-4', data: SECTION_ALPHA_LAYOUT[4] },
+                { id: 'row-alpha-5', data: SECTION_ALPHA_LAYOUT[5] }
+            ];
+
+            alphaContainers.forEach(container => {
+                const el = document.getElementById(container.id);
+                el.innerHTML = '';
+                container.data.forEach(keyObj => {
+                    el.appendChild(createKeyElement(keyObj));
+                });
+            });
+
+            const navRows = [
+                { id: 'row-nav-f', data: SECTION_NAV_LAYOUT.rowNavF },
+                { id: 'row-nav-edit-1', data: SECTION_NAV_LAYOUT.rowEdit1 },
+                { id: 'row-nav-edit-2', data: SECTION_NAV_LAYOUT.rowEdit2 },
+                { id: 'row-nav-edit-3', data: SECTION_NAV_LAYOUT.rowEdit3 },
+                { id: 'row-arrows-up', data: SECTION_NAV_LAYOUT.arrowsUp },
+                { id: 'row-arrows-down', data: SECTION_NAV_LAYOUT.arrowsDown }
+            ];
+
+            navRows.forEach(row => {
+                const el = document.getElementById(row.id);
+                el.innerHTML = '';
+                row.data.forEach(keyObj => {
+                    el.appendChild(createKeyElement(keyObj));
+                });
+            });
+
+            const npF = document.getElementById('row-numpad-f');
+            npF.innerHTML = '';
+            SECTION_NUMPAD_LAYOUT.topRow.forEach(keyObj => {
+                npF.appendChild(createKeyElement(keyObj));
+            });
+
+            const npGrid = document.getElementById('numpad-grid');
+            npGrid.innerHTML = '';
+            SECTION_NUMPAD_LAYOUT.gridKeys.forEach(keyObj => {
+                npGrid.appendChild(createNumpadElement(keyObj));
+            });
+
+            applyThemeClasses();
+            updateTotalKeysCount();
+            updateNkroAnalysis();
+        }
+
+        function applyThemeClasses() {
+            const currentThemeName = document.getElementById('theme-select').value;
+            const theme = THEMES[currentThemeName];
+
+            const keycaps = document.querySelectorAll('.keycap');
+            keycaps.forEach(el => {
+                const code = el.getAttribute('data-code');
+                
+                el.className = el.className.split(' ').filter(c => 
+                    !c.startsWith('bg-') && !c.startsWith('text-') && !c.startsWith('border-') && !c.startsWith('shadow-')
+                ).join(' ');
+
+                if (chatterKeys.has(code)) {
+                    el.classList.add(...theme.keycapChatter.split(' '));
+                } else if (pressedKeys.has(code)) {
+                    el.classList.add(...theme.keycapActive.split(' '));
+                    el.classList.add('active'); 
+                } else if (testedKeys.has(code)) {
+                    el.classList.add(...theme.keycapTested.split(' '));
+                    el.classList.remove('active');
+                } else {
+                    el.classList.add(...theme.keycapDefault.split(' '));
+                    el.classList.remove('active');
+                }
+            });
+        }
+
+        function changeLayout(layout) {
+            currentLayout = layout;
+            
+            ['full', 'tkl', 'compact'].forEach(l => {
+                const btn = document.getElementById(`btn-layout-${l}`);
+                if (l === layout) {
+                    btn.className = "px-3 py-1.5 rounded text-xs font-bold transition bg-[#313244] text-white";
+                } else {
+                    btn.className = "px-3 py-1.5 rounded text-xs font-bold transition text-[#a6adc8] hover:text-white";
+                }
+            });
+
+            const navSection = document.getElementById('section-nav');
+            const numpadSection = document.getElementById('section-numpad');
+
+            if (layout === 'full') {
+                navSection.style.display = 'flex';
+                numpadSection.style.display = 'block';
+            } else if (layout === 'tkl') {
+                navSection.style.display = 'flex';
+                numpadSection.style.display = 'none';
+            } else if (layout === 'compact') {
+                navSection.style.display = 'none';
+                numpadSection.style.display = 'none';
+            }
+
+            resetTester(); 
+        }
+
+        function updateTotalKeysCount() {
+            let total = 0;
+            const keycaps = document.querySelectorAll('.keycap');
+            keycaps.forEach(el => {
+                if (el.getBoundingClientRect().width > 0) {
+                    total++;
+                }
+            });
+            totalKeysInLayout = total;
+            document.getElementById('stat-tested-total').innerText = `/ ${totalKeysInLayout}`;
+            updateStatsUI();
+        }
+
+        function changeTheme() {
+            applyThemeClasses();
+        }
+
+
+        // --- 5. 鍵盤事件信號攔截器與核心診斷邏輯 ---
+
+        // 物理碼標準化：過濾並橋接各種系統與瀏覽器的差異物理碼 (特別針對 PrtSc, ScrollLock, Pause 與底層 KeyCode)
+        function normalizeEventCode(e) {
+            let code = e.code;
+            const keyCode = e.keyCode || e.which;
+            
+            // 強制綁定傳統物理鍵碼（最高優先權，免除所有瀏覽器/驅動自訂名稱限制）
+            if (keyCode === 44) return 'PrintScreen';
+            if (keyCode === 145) return 'ScrollLock';
+            if (keyCode === 19) return 'Pause';
+
+            // 備用解譯補正
+            if (!code) {
+                if (e.key === 'PrintScreen' || e.key === 'PrtSc' || e.key === 'Snapshot') code = 'PrintScreen';
+                else if (e.key === 'ScrollLock' || e.key === 'Scroll') code = 'ScrollLock';
+                else if (e.key === 'Pause' || e.key === 'Break') code = 'Pause';
+            }
+
+            if (code === 'PrintScreen' || e.key === 'PrintScreen' || e.key === 'PrtSc') return 'PrintScreen';
+            if (code === 'ScrollLock' || e.key === 'ScrollLock' || e.key === 'Scroll') return 'ScrollLock';
+            if (code === 'Pause' || e.key === 'Pause' || e.key === 'Break') return 'Pause';
+
+            return code;
+        }
+
+        function simulateKeyPress(code) {
+            handleHardwareDown({ code, key: code, location: 0, repeat: false });
+        }
+        function simulateKeyRelease(code) {
+            handleHardwareUp({ code });
+        }
+
+        // 全域硬體攔截機制 (全面封鎖 F1-F12, Alt, Tab, Backspace 以利測試)
+        // 核心改進：使用 capture: true (事件捕獲階段) 強行先於瀏覽器/OS事件層級實施 stopPropagation 阻斷！
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'F12' || (e.ctrlKey && e.key === 'r') || (e.metaKey && e.key === 'r')) {
+                return;
+            }
+            e.preventDefault(); 
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            // ⚡ CPS 鍵盤單鍵手速計數分支 (且非冷卻狀態)
+            if (cpsMode === 'keyboard' && !cpsCooldownActive) {
+                if (!e.repeat) { // 必須排除長按系統自發重複訊號
+                    handleCpsKeyboardTap(normalizeEventCode(e));
+                }
+            }
+
+            handleHardwareDown(e);
+        }, true); // 使用 Capture 階段
+
+        window.addEventListener('keyup', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            const code = normalizeEventCode(e);
+
+            // 【PrtSc 專用 keyup 補償機制】：因為 Print Screen 大部分系統僅觸發 keyup。
+            // 若此鍵不在已按下列表中，代表沒走過 keydown。在此主動補足一個「按下+放開」完整週期。
+            if (code === 'PrintScreen' && !pressedKeys.has('PrintScreen')) {
+                // 如果是在 CPS 鍵盤模式 (且非冷卻狀態)，也需要補齊一個 Tap 動作
+                if (cpsMode === 'keyboard' && !cpsCooldownActive) {
+                    handleCpsKeyboardTap('PrintScreen');
+                }
+                handleHardwareDown({ code: 'PrintScreen', key: 'PrtSc', location: 0, repeat: false });
+                setTimeout(() => {
+                    handleHardwareUp({ code: 'PrintScreen' });
+                }, 100);
+                return;
+            }
+
+            handleHardwareUp(e);
+        }, true); // 使用 Capture 階段
+
+        window.addEventListener('mousemove', updateModifierLocks);
+        window.addEventListener('click', updateModifierLocks);
+
+        function updateModifierLocks(e) {
+            if (!e) return;
+            const checkModifier = (mod) => {
+                if (typeof e.getModifierState === 'function') {
+                    return e.getModifierState(mod);
+                }
+                return false;
+            };
+
+            const caps = document.getElementById('led-caps');
+            const num = document.getElementById('led-num');
+            const scroll = document.getElementById('led-scroll');
+
+            if (checkModifier('CapsLock')) { caps.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50'; }
+            else { caps.className = 'w-2.5 h-2.5 rounded-full bg-gray-600'; }
+
+            if (checkModifier('NumLock')) { num.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50'; }
+            else { num.className = 'w-2.5 h-2.5 rounded-full bg-gray-600'; }
+
+            if (checkModifier('ScrollLock')) { scroll.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50'; }
+            else { scroll.className = 'w-2.5 h-2.5 rounded-full bg-gray-600'; }
+        }
+
+        // 物理按壓處理
+        function handleHardwareDown(e) {
+            const code = normalizeEventCode(e);
+            const now = performance.now();
+
+            const keyEl = document.getElementById(`key-${code}`);
+            if (!keyEl) return;
+
+            // 雙向音效：按鍵按下
+            if (!pressedKeys.has(code)) {
+                const soundType = document.getElementById('switch-sound').value;
+                playSwitchSound(soundType, 'down');
+            }
+
+            // Chattering 異常彈跳診斷 (防連點)
+            if (lastReleaseTime[code]) {
+                const diff = now - lastReleaseTime[code];
+                if (diff < 15 && !e.repeat) {
+                    registerChattering(code, diff);
+                }
+            }
+
+            // 輪詢率與信號間隔延遲計算法
+            if (lastPressTime[code] && !e.repeat) {
+                const pressDiff = now - lastPressTime[code];
+                if (pressDiff > 1 && pressDiff < minInterval) {
+                    minInterval = pressDiff;
+                    updatePollingRateUI(minInterval);
+                }
+            }
+            lastPressTime[code] = now;
+
+            pressedKeys.add(code);
+            testedKeys.add(code);
+
+            // NKRO 最大無衝更新與凍結偵測
+            if (pressedKeys.size > maxKro) {
+                maxKro = pressedKeys.size;
+                if (!nkroPeakLocked || pressedKeys.size > nkroPeakKeys.length) {
+                    nkroPeakKeys = Array.from(pressedKeys);
+                }
+            } else if (!nkroPeakLocked) {
+                if (pressedKeys.size > nkroPeakKeys.length) {
+                    nkroPeakKeys = Array.from(pressedKeys);
+                }
+            }
+
+            updateKeyInfoPanel(e);
+            appendSignalLog(code, 'DOWN', e.repeat ? 'Repeat' : '');
+            applyThemeClasses();
+            updateStatsUI();
+            updateModifierLocks(e);
+            updateNkroAnalysis();
+        }
+
+        // 物理釋放處理
+        function handleHardwareUp(e) {
+            const code = normalizeEventCode(e);
+            const now = performance.now();
+
+            const keyEl = document.getElementById(`key-${code}`);
+            if (!keyEl) return;
+
+            // 雙向音效：按鍵放開 (Rebound)
+            const soundType = document.getElementById('switch-sound').value;
+            playSwitchSound(soundType, 'up');
+
+            pressedKeys.delete(code);
+            lastReleaseTime[code] = now;
+
+            appendSignalLog(code, 'UP', '');
+            applyThemeClasses();
+            updateStatsUI();
+            updateModifierLocks(e);
+            updateNkroAnalysis();
+        }
+
+        function registerChattering(code, diff) {
+            let count = chatterKeys.get(code) || 0;
+            count++;
+            chatterKeys.set(code, count);
+
+            const chatterLogs = document.getElementById('chatter-logs');
+            if (chatterLogs.innerHTML.includes('無檢測到物理連點')) {
+                chatterLogs.innerHTML = '';
+            }
+
+            const logItem = document.createElement('div');
+            logItem.className = 'p-2 bg-red-950/40 border border-red-500/30 rounded text-red-300 font-mono flex items-center justify-between animate-shake';
+            logItem.innerHTML = `
+                <span>⚠️ [${code}]</span>
+                <span>異常連點: <strong>${diff.toFixed(2)}ms</strong> (#${count})</span>
+            `;
+            chatterLogs.insertBefore(logItem, chatterLogs.firstChild);
+
+            document.getElementById('stat-chatter').innerText = chatterKeys.size;
+        }
+
+        // --- 6. NKRO 專屬診斷面板更新與盲測機制 ---
+
+        function toggleNkroLock() {
+            nkroPeakLocked = !nkroPeakLocked;
+            const btn = document.getElementById('btn-nkro-lock');
+            if (nkroPeakLocked) {
+                btn.className = "px-3 py-1.5 bg-[#f38ba8] hover:bg-[#f38ba8]/90 text-[#11111b] rounded-lg text-xs font-bold shadow transition-all active:scale-95";
+                btn.innerText = "🔒 鎖定模式中 (不隨釋放而清空)";
+            } else {
+                btn.className = "px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold shadow transition-all active:scale-95";
+                btn.innerText = "🔓 進入「最高峰值鎖定模式」";
+                nkroPeakKeys = Array.from(pressedKeys);
+                updateNkroAnalysis();
+            }
+        }
+
+        function clearNkroPeak() {
+            nkroPeakKeys = [];
+            if (!nkroPeakLocked) {
+                nkroPeakKeys = Array.from(pressedKeys);
+            }
+            maxKro = pressedKeys.size;
+            updateNkroAnalysis();
+            updateStatsUI();
+        }
+
+        function highlightNkroGroup(codes) {
+            applyThemeClasses();
+
+            codes.forEach(code => {
+                const keyEl = document.getElementById(`key-${code}`);
+                if (keyEl) {
+                    keyEl.classList.add('animate-pulse');
+                    keyEl.style.outline = '3px solid #f9e2af';
+                }
+            });
+
+            setTimeout(() => {
+                codes.forEach(code => {
+                    const keyEl = document.getElementById(`key-${code}`);
+                    if (keyEl) {
+                        keyEl.classList.remove('animate-pulse');
+                        keyEl.style.outline = '';
+                    }
+                });
+                applyThemeClasses();
+            }, 4000);
+        }
+
+        function updateNkroAnalysis() {
+            const badge = document.getElementById('nkro-badge');
+            const peakCountEl = document.getElementById('nkro-peak-count');
+            const peakContainer = document.getElementById('nkro-peak-keys');
+
+            if (maxKro === 0) {
+                badge.className = "text-xl font-bold text-[#585b70]";
+                badge.innerText = "尚未開始測試";
+            } else if (maxKro < 4) {
+                badge.className = "text-2xl font-black text-[#f38ba8]";
+                badge.innerText = `Legacy (${maxKro}KRO) ⚠️`;
+            } else if (maxKro >= 4 && maxKro <= 6) {
+                badge.className = "text-2xl font-black text-[#f9e2af]";
+                badge.innerText = `6-Key Rollover (6KRO) ⚡`;
+            } else {
+                badge.className = "text-2xl font-black text-[#a6e3a1]";
+                badge.innerText = `True NKRO (全鍵無衝) 👑`;
+            }
+
+            peakCountEl.innerText = `${nkroPeakKeys.length} Keys`;
+
+            if (nkroPeakKeys.length === 0) {
+                peakContainer.innerHTML = '<span class="text-xs text-[#585b70] italic">尚未捕獲到高難度多鍵同按信號... 請用雙手手掌同時壓下鍵盤進行測試！</span>';
+            } else {
+                peakContainer.innerHTML = '';
+                nkroPeakKeys.forEach(code => {
+                    const cleanLabel = code.replace('Key', '').replace('Digit', '');
+                    const keyCapsule = document.createElement('span');
+                    keyCapsule.className = "px-2 py-1 bg-[#313244] border border-[#45475a] text-white rounded text-[11px] font-mono font-bold shadow-sm";
+                    keyCapsule.innerText = cleanLabel;
+                    peakContainer.appendChild(keyCapsule);
+                });
+            }
+        }
+
+
+        // --- ⚡ 新增 7. CPS 點擊速度測試模組核心引擎 ---
+
+        function switchCpsMode(mode) {
+            cpsMode = mode;
+            const btnMouse = document.getElementById('btn-cps-mouse');
+            const btnKey = document.getElementById('btn-cps-key');
+            const padInstruction = document.getElementById('cps-pad-instruction');
+            const lockedInfo = document.getElementById('cps-pad-locked-info');
+
+            if (mode === 'mouse') {
+                btnMouse.className = "px-2.5 py-1 rounded text-xs font-bold transition bg-[#313244] text-white";
+                btnKey.className = "px-2.5 py-1 rounded text-xs font-bold transition text-[#a6adc8] hover:text-white";
+                padInstruction.innerText = "點擊此區域開始測試 (滑鼠模式 - 支援左右鍵)";
+                lockedInfo.classList.add('invisible');
+            } else {
+                btnMouse.className = "px-2.5 py-1 rounded text-xs font-bold transition text-[#a6adc8] hover:text-white";
+                btnKey.className = "px-2.5 py-1 rounded text-xs font-bold transition bg-[#313244] text-white";
+                padInstruction.innerText = "請在鍵盤上狂點任意單鍵開始測試！";
+                lockedInfo.classList.remove('invisible');
+                lockedInfo.innerText = "等待首發按鍵鎖定中...";
+            }
+            resetCpsTest();
+        }
+
+        function setCpsDuration() {
+            cpsDuration = parseInt(document.getElementById('select-cps-time').value);
+            resetCpsTest();
+        }
+
+        function resetCpsTest() {
+            // 停止現有計時
+            if (cpsTimerInterval) {
+                clearInterval(cpsTimerInterval);
+                cpsTimerInterval = null;
+            }
+            // ⚡ 停止現有冷卻
+            if (cpsCooldownInterval) {
+                clearInterval(cpsCooldownInterval);
+                cpsCooldownInterval = null;
+            }
+            cpsCooldownActive = false;
+            cpsActive = false;
+            cpsClicks = 0;
+            cpsTimeRemaining = cpsDuration;
+            cpsLockedKey = null;
+            cpsPeak = 0.0;
+            cpsClickTimestamps = [];
+
+            // UI 狀態還原
+            document.getElementById('cps-timer-val').innerText = `${cpsTimeRemaining.toFixed(1)}s`;
+            document.getElementById('cps-realtime-val').innerText = "0.0";
+            document.getElementById('cps-total-clicks').innerText = "0 次";
+            document.getElementById('cps-peak-val').innerText = "0.0 cps";
+            document.getElementById('cps-progress-bg').style.width = "0%";
+            document.getElementById('cps-progress-bg').style.backgroundColor = "rgba(99, 102, 241, 0.1)";
+            document.getElementById('cps-pad-big-text').innerText = "READY";
+
+            if (cpsMode === 'keyboard') {
+                document.getElementById('cps-pad-locked-info').innerText = "等待首發按鍵鎖定中...";
+            } else {
+                document.getElementById('cps-pad-instruction').innerText = "點擊此區域開始測試 (滑鼠模式 - 支援左右鍵)";
+            }
+            
+            updateCpsRankUI(0.0);
+        }
+
+        // 滑鼠在極限挑戰板上按下 (包含左、右、中鍵)
+        function handleCpsPadMouseDown(event) {
+            // 防止瀏覽器預設行為
+            event.preventDefault();
+            event.stopPropagation();
+            
+            if (cpsMode !== 'mouse') return;
+            if (cpsCooldownActive) return; // ⚡ 攔截冷卻中點擊
+
+            // 實時撥放對應的鍵帽觸底發聲反饋
+            const soundType = document.getElementById('switch-sound').value;
+            playSwitchSound(soundType, 'down');
+            setTimeout(() => playSwitchSound(soundType, 'up'), 50);
+
+            const now = performance.now();
+
+            if (!cpsActive) {
+                startCpsTest();
+            }
+
+            cpsClicks++;
+            cpsClickTimestamps.push(now);
+            document.getElementById('cps-total-clicks').innerText = `${cpsClicks} 次`;
+            document.getElementById('cps-pad-big-text').innerText = "CLICK!";
+        }
+
+        // 鍵盤單鍵敲擊處理
+        function handleCpsKeyboardTap(code) {
+            if (cpsMode !== 'keyboard') return;
+            if (cpsCooldownActive) return; // ⚡ 攔截冷卻中按鍵
+            const now = performance.now();
+
+            // 若尚未開跑，首發按鍵作為本次鎖定鍵
+            if (!cpsActive) {
+                cpsLockedKey = code;
+                document.getElementById('cps-pad-locked-info').innerText = `已鎖定單鍵: [${code.replace('Key', '')}]`;
+                startCpsTest();
+            }
+
+            // 判定是否為已被鎖定的單鍵訊號
+            if (code === cpsLockedKey) {
+                cpsClicks++;
+                cpsClickTimestamps.push(now);
+                document.getElementById('cps-total-clicks').innerText = `${cpsClicks} 次`;
+                document.getElementById('cps-pad-big-text').innerText = code.replace('Key', '');
+            }
+        }
+
+        // 啟動點擊速率計時任務
+        function startCpsTest() {
+            cpsActive = true;
+            cpsClicks = 0;
+            cpsStartTime = performance.now();
+            cpsClickTimestamps = [];
+            cpsPeak = 0.0;
+
+            cpsTimerInterval = setInterval(() => {
+                const now = performance.now();
+                const elapsed = (now - cpsStartTime) / 1000;
+                cpsTimeRemaining = Math.max(0, cpsDuration - elapsed);
+
+                // 更新倒數進度與進度條動畫
+                document.getElementById('cps-timer-val').innerText = `${cpsTimeRemaining.toFixed(1)}s`;
+                const progressPct = (elapsed / cpsDuration) * 100;
+                document.getElementById('cps-progress-bg').style.width = `${Math.min(100, progressPct)}%`;
+
+                // 滾動計算法：動態計算過去 1 秒（1000ms）內累計的點擊數作為「當前瞬時秒速」
+                cpsClickTimestamps = cpsClickTimestamps.filter(t => now - t <= 1000);
+                const currentCps = cpsClickTimestamps.length;
+                document.getElementById('cps-realtime-val').innerText = currentCps.toFixed(1);
+
+                // 紀錄單次最高峰值 Peak CPS
+                if (currentCps > cpsPeak) {
+                    cpsPeak = currentCps;
+                    document.getElementById('cps-peak-val').innerText = `${cpsPeak.toFixed(1)} cps`;
+                }
+
+                // 更新動態徽章評級
+                updateCpsRankUI(currentCps);
+
+                // 時間終了，測試結算
+                if (cpsTimeRemaining <= 0) {
+                    endCpsTest();
+                }
+            }, 60); // 16fps 級別刷新，保證秒速平滑
+        }
+
+        // 結束 CPS 手速測試並結算成績
+        function endCpsTest() {
+            if (cpsTimerInterval) {
+                clearInterval(cpsTimerInterval);
+                cpsTimerInterval = null;
+            }
+            cpsActive = false;
+
+            // 計算最終總體平均 CPS
+            const finalCps = cpsClicks / cpsDuration;
+            document.getElementById('cps-pad-big-text').innerText = "DONE!";
+            document.getElementById('cps-realtime-val').innerText = finalCps.toFixed(1);
+            
+            // 寫入歷史最佳紀錄
+            if (cpsMode === 'mouse') {
+                if (finalCps > cpsBestMouse) cpsBestMouse = finalCps;
+            } else {
+                if (finalCps > cpsBestKeyboard) cpsBestKeyboard = finalCps;
+            }
+
+            const bestMouseStr = cpsBestMouse > 0 ? `${cpsBestMouse.toFixed(1)}` : '--';
+            const bestKeyStr = cpsBestKeyboard > 0 ? `${cpsBestKeyboard.toFixed(1)}` : '--';
+            document.getElementById('cps-best-record').innerText = `🖱️ ${bestMouseStr} / ⌨️ ${bestKeyStr}`;
+
+            updateCpsRankUI(finalCps, true);
+
+            // ⚡ 觸發冷卻防刷鎖定機制（10秒）
+            startCpsCooldown();
+        }
+
+        // ⚡ 新增：執行 10 秒鐘防連點冷卻鎖定計時器
+        function startCpsCooldown() {
+            cpsCooldownActive = true;
+            let cooldownDuration = 10.0;
+            
+            const padBigText = document.getElementById('cps-pad-big-text');
+            const padInstruction = document.getElementById('cps-pad-instruction');
+            const progressBg = document.getElementById('cps-progress-bg');
+            
+            padInstruction.innerText = "⚠️ 測試結束，冷卻鎖定中（10秒）";
+            progressBg.style.backgroundColor = "rgba(239, 68, 68, 0.25)"; // 改為紅色鎖定狀態條
+            
+            let cooldownStart = performance.now();
+            
+            cpsCooldownInterval = setInterval(() => {
+                const now = performance.now();
+                const elapsed = (now - cooldownStart) / 1000;
+                let remaining = Math.max(0, cooldownDuration - elapsed);
+                
+                padBigText.innerText = `LOCK (${remaining.toFixed(1)}s)`;
+                progressBg.style.width = `${(remaining / cooldownDuration) * 100}%`;
+                
+                if (remaining <= 0) {
+                    clearInterval(cpsCooldownInterval);
+                    cpsCooldownInterval = null;
+                    cpsCooldownActive = false;
+                    
+                    // 還原為 READY 狀態
+                    padBigText.innerText = "READY";
+                    progressBg.style.backgroundColor = "rgba(99, 102, 241, 0.1)"; // 還原藍色背景
+                    progressBg.style.width = "0%";
+                    if (cpsMode === 'mouse') {
+                        padInstruction.innerText = "點擊此區域開始測試 (滑鼠模式 - 支援左右鍵)";
+                    } else {
+                        padInstruction.innerText = "請在鍵盤上狂點任意單鍵開始測試！";
+                    }
+                }
+            }, 50);
+        }
+
+        // 段位評估演算法與徽章渲染
+        function updateCpsRankUI(cpsScore, isFinal = false) {
+            const badge = document.getElementById('cps-rank-badge');
+            let rankText = "🐌 慢速樹懶";
+            let rankClass = "text-gray-400";
+
+            if (cpsScore === 0) {
+                rankText = "🐌 慢速樹懶";
+                rankClass = "text-[#9399b2]";
+            } else if (cpsScore < 4.0) {
+                rankText = "🐌 慢速樹懶 (Sloth)";
+                rankClass = "text-[#f38ba8]"; // 紅
+            } else if (cpsScore >= 4.0 && cpsScore < 7.0) {
+                rankText = "🐢 平凡人類 (Human)";
+                rankClass = "text-[#f9e2af]"; // 黃
+            } else if (cpsScore >= 7.0 && cpsScore < 10.0) {
+                rankText = "⚡ 狂暴獵豹 (Cheetah)";
+                rankClass = "text-[#a6e3a1]"; // 綠
+            } else if (cpsScore >= 10.0 && cpsScore < 13.0) {
+                rankText = "👑 電競神手 (Pro Gamer)";
+                rankClass = "text-[#89b4fa]"; // 藍
+            } else if (cpsScore >= 13.0 && cpsScore < 16.0) {
+                rankText = "👽 外星科技 (Alien)";
+                rankClass = "text-[#cba6f7]"; // 紫
+            } else {
+                rankText = "🌌 宇宙終結者 (God Mode)";
+                rankClass = "text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 animate-pulse";
+            }
+
+            badge.className = `text-lg font-black mt-2 flex items-center gap-1.5 ${rankClass}`;
+            badge.innerHTML = isFinal ? `🎯 最終段位: ${rankText}` : rankText;
+        }
+
+
+        // --- 8. 介面附屬組件與控制更新 ---
+
+        function updateKeyInfoPanel(e) {
+            document.getElementById('info-key').innerText = e.key === ' ' ? 'Space' : e.key;
+            document.getElementById('info-code').innerText = e.code || 'PrintScreen';
+            document.getElementById('info-keycode').innerText = e.keyCode || '--';
+            
+            let loc = '標準區域 (Standard)';
+            if (e.location === 1) loc = '左側功能區 (Left)';
+            else if (e.location === 2) loc = '右側功能區 (Right)';
+            else if (e.location === 3) loc = '數字小鍵盤 (Numpad)';
+            document.getElementById('info-location').innerText = loc;
+        }
+
+        function updatePollingRateUI(interval) {
+            const rate = Math.round(1000 / interval);
+            const container = document.getElementById('stat-polling');
+            if (rate > 2000) {
+                container.innerHTML = `${interval.toFixed(1)} <span class="text-xs">ms (超速)</span>`;
+            } else {
+                container.innerHTML = `${interval.toFixed(1)} <span class="text-xs">ms (${rate}Hz)</span>`;
+            }
+        }
+
+        function appendSignalLog(code, action, extra) {
+            const container = document.getElementById('event-logs');
+            if (container.innerHTML.includes('等待實體按鍵輸入')) {
+                container.innerHTML = '';
+            }
+
+            const time = new Date().toLocaleTimeString('zh-TW', { hour12: false }) + '.' + String(Date.now() % 1000).padStart(3, '0');
+            const logItem = document.createElement('div');
+            logItem.className = `flex justify-between items-center py-0.5 border-b border-[#313244]/50 ${action === 'DOWN' ? 'text-[#89b4fa]' : 'text-[#a6adc8]/70'}`;
+            logItem.innerHTML = `
+                <span>[${time}]</span>
+                <span class="font-bold">${code}</span>
+                <span class="px-1.5 rounded text-[9px] ${action === 'DOWN' ? 'bg-[#89b4fa]/10 text-[#89b4fa]' : 'bg-[#a6adc8]/10 text-[#a6adc8]'}" style="font-size:8px">${action} ${extra}</span>
+            `;
+
+            container.insertBefore(logItem, container.firstChild);
+
+            if (container.childNodes.length > 40) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        // 清除日誌
+        function clearLogs() {
+            document.getElementById('event-logs').innerHTML = '<div class="text-[#a6adc8] italic text-center py-8">等待實體按鍵輸入...</div>';
+        }
+
+        // 更新統計看板
+        function updateStatsUI() {
+            document.getElementById('stat-active').innerText = pressedKeys.size;
+            document.getElementById('stat-nkro').innerText = maxKro;
+            document.getElementById('stat-tested').innerText = testedKeys.size;
+        }
+
+        // 重置測試器
+        function resetTester() {
+            pressedKeys.clear();
+            testedKeys.clear();
+            chatterKeys.clear();
+            lastReleaseTime = {};
+            lastPressTime = {};
+            maxKro = 0;
+            minInterval = Infinity;
+            nkroPeakKeys = [];
+
+            document.getElementById('stat-active').innerText = '0';
+            document.getElementById('stat-nkro').innerText = '0';
+            document.getElementById('stat-tested').innerText = '0';
+            document.getElementById('stat-chatter').innerText = '0';
+            document.getElementById('stat-polling').innerHTML = '-- <span class="text-xs">ms</span>';
+            
+            document.getElementById('chatter-logs').innerHTML = '<div class="text-[#a6adc8] italic text-center py-8">無檢測到物理連點異常。軸體健康度優異！</div>';
+            clearLogs();
+            applyThemeClasses();
+            updateNkroAnalysis();
+            resetCpsTest();
+        }
+
+        // 複製測試報告
+        function copyReport() {
+            const testedCount = testedKeys.size;
+            const pct = ((testedCount / totalKeysInLayout) * 100).toFixed(1);
+            let chatterDetails = '';
+            if (chatterKeys.size > 0) {
+                chatterKeys.forEach((count, code) => {
+                    chatterDetails += `  - 按鍵 [${code}]: 發現 ${count} 次連點異常\n`;
+                });
+            } else {
+                chatterDetails = '  - 無檢測到任何連點與物理故障，健康狀態完美！\n';
+            }
+
+            let level = 'True NKRO 全鍵無衝';
+            if (maxKro < 4) level = 'Legacy (2KRO/3KRO) ⚠️';
+            else if (maxKro <= 6) level = '標準 6KRO ⚡';
+
+            const bestMouseStr = cpsBestMouse > 0 ? `${cpsBestMouse.toFixed(1)} CPS` : '未測試';
+            const bestKeyStr = cpsBestKeyboard > 0 ? `${cpsBestKeyboard.toFixed(1)} CPS` : '未測試';
+
+            const report = 
+`==============================================
+         線上鍵盤完整度與 NKRO 診斷報告
+==============================================
+● 測試時間: ${new Date().toLocaleString('zh-TW')}
+● 測試鍵盤配置規格: ${currentLayout.toUpperCase()} (包含 ${totalKeysInLayout} 顆按鍵)
+● 鍵盤完整觸發覆蓋率: ${pct}% (${testedCount} / ${totalKeysInLayout})
+● 最大極限多鍵無衝能力 (NKRO): 同時按下 ${maxKro} 鍵
+● 鍵盤硬體無衝鑑定等級: ${level}
+● 實測最低物理訊號間隔: ${minInterval === Infinity ? '無紀錄' : minInterval.toFixed(2) + ' ms'}
+● 按鍵軸體連點抖動 (Chattering) 檢測:
+${chatterDetails}
+● 個人極限點擊手速紀錄 (CPS):
+  - 🖱️ 滑鼠最佳速率: ${bestMouseStr}
+  - ⌨️ 鍵盤單鍵最佳: ${bestKeyStr}
+==============================================
+本報告由《線上鍵盤功能完整度測試機》診斷生成。
+祝您的硬體與打字體驗順暢！`;
+
+            const dummyTextArea = document.createElement("textarea");
+            document.body.appendChild(dummyTextArea);
+            dummyTextArea.value = report;
+            dummyTextArea.select();
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showToast();
+                } else {
+                    console.error("無法複製文字報告");
+                }
+            } catch (err) {
+                console.error("複製報告時出錯: ", err);
+            }
+            document.body.removeChild(dummyTextArea);
+        }
+
+        // 彈出小通知
+        function showToast() {
+            const toast = document.getElementById('toast');
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(20px)';
+            }, 3000);
+        }
+
+        window.onload = function() {
+            renderKeyboard();
+            window.addEventListener('resize', updateTotalKeysCount);
+        };
+    </script>
+</body>
+</html>
